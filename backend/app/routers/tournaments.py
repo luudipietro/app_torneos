@@ -57,7 +57,10 @@ def patch_tournament(
     db: Session = Depends(get_db),
 ):
     t = tournament_access(db, user, tid, admin=True)
-    for k, v in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    if changes.get("rules") is not None and (t.rules or {}).get("knockout_plan"):
+        changes["rules"] = {**changes["rules"], "knockout_plan": t.rules["knockout_plan"]}  # no pisar el formato de llaves
+    for k, v in changes.items():
         setattr(t, k, v)
     db.commit()
     return _out(db, user, t)

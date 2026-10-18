@@ -1,13 +1,8 @@
-from string import ascii_uppercase
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from domain.fixture import round_robin
-from domain.groups import draw_groups, suggest_layouts
 from domain.standings import Result, Rules, standings
-from domain.team import Team
 
 from .. import models, schemas
 from ..db import get_db
@@ -41,60 +36,6 @@ def _rules(t: models.Tournament) -> Rules:
         loss=r.get("loss", base.loss),
         tiebreakers=r.get("tiebreakers", base.tiebreakers),
     )
-
-
-@router.get("/tournaments/{tid}/layouts", response_model=list[schemas.LayoutOut])
-def layouts(tid: int, user: models.User = Depends(current_user), db: Session = Depends(get_db)):
-    """Distribuciones de grupos sugeridas según la cantidad de equipos cargados."""
-    tournament_access(db, user, tid, admin=False)
-    n = len(_teams(db, tid))
-    if n < 2:
-        raise HTTPException(422, "Cargá al menos 2 equipos")
-    return [
-        schemas.LayoutOut(n_groups=l.n_groups, sizes=list(l.sizes), balanced=l.balanced)
-        for l in suggest_layouts(n)
-    ]
-
-
-@router.post("/tournaments/{tid}/stages/groups", response_model=schemas.StageOut, status_code=201)
-def create_group_stage(
-    tid: int,
-    body: schemas.GroupStageIn,
-    user: models.User = Depends(current_user),
-    db: Session = Depends(get_db),
-):
-    """Sortea los grupos y genera todos los partidos de la fase."""
-    t = tournament_access(db, user, tid, admin=True)
-    if t.stages:
-        raise HTTPException(409, "El torneo ya tiene etapas; borrá la existente para rehacer el sorteo")
-    teams = _teams(db, tid)
-    if body.n_groups * 2 > len(teams):
-        raise HTTPException(422, "Cada grupo necesita al menos 2 equipos")
-
-    by_id = {m.id: m for m in teams}
-    drawn = draw_groups(
-        [Team(name=m.name, id=m.id, seed=m.seed) for m in teams], body.n_groups, body.seed
-    )
-    stage = models.Stage(
-        tournament_id=tid, order=1, type="groups", name=body.name,
-        config={"n_groups": body.n_groups, "double_round": body.double_round, "seed": body.seed},
-    )
-    db.add(stage)
-    for i, members in enumerate(drawn):
-        g = models.Group(name=f"Grupo {ascii_uppercase[i]}")
-        g.teams = [models.GroupTeam(team_id=m.id) for m in members]
-        stage.groups.append(g)
-    db.flush()
-    for g, members in zip(stage.groups, drawn):
-        for rnd, matches in enumerate(round_robin([m.id for m in members], body.double_round), 1):
-            for home, away in matches:
-                assert home in by_id and away in by_id
-                db.add(models.Match(
-                    tournament_id=tid, stage_id=stage.id, group_id=g.id,
-                    round=rnd, home_team_id=home, away_team_id=away,
-                ))
-    db.commit()
-    return _stage_out(stage)
 
 
 @router.get("/tournaments/{tid}/stages", response_model=list[schemas.StageOut])

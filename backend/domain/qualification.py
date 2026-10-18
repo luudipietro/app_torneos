@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 from .knockout import BMatch, build_bracket
 from .standings import Row
@@ -23,11 +23,27 @@ class CupSpec:
     ``positions``: entran todos los equipos que terminaron en esos puestos del grupo.
     ``extra``: (puesto, cantidad) suma a los mejores de ese puesto entre todos los grupos,
     por ejemplo (3, 8) = "los 8 mejores terceros".
+
+    Para encadenar fases (ver ``phases.py``): ``from_winners`` / ``from_losers`` son nombres de
+    fases anteriores cuyos ganadores / perdedores (de su última ronda) también entran acá;
+    ``max_rounds`` corta la fase tras esas rondas (1 = una sola ronda de cruces, como un
+    reclasificatorio); ``third_place`` y ``avoid_same_group`` pisan el valor general.
     """
 
     name: str
     positions: tuple[int, ...] = ()
     extra: tuple[tuple[int, int], ...] = ()
+    from_winners: tuple[str, ...] = ()
+    from_losers: tuple[str, ...] = ()
+    max_rounds: int | None = None
+    third_place: bool | None = None
+    avoid_same_group: bool | None = None
+    # cómo se arman los cruces de la primera ronda:
+    #   seeded = mejor contra peor (siembra), cross = estilo mundial (1ºA-2ºB, 1ºB-2ºA),
+    #   random = al azar (reproducible con ``pairing_seed``), manual = ``manual_pairs`` con códigos como "1A"
+    pairing: str = "seeded"
+    pairing_seed: int | None = None
+    manual_pairs: tuple[tuple[str, str], ...] = ()
 
 
 def _record(e: Entrant) -> tuple:
@@ -66,17 +82,21 @@ def assign_cups(entrants: Sequence[Entrant], specs: Sequence[CupSpec]) -> list[l
     return out
 
 
-def avoid_same_group(entrants: Sequence[Entrant], matches: Sequence[BMatch]) -> list[Entrant]:
+def avoid_same_group(
+    entrants: Sequence, matches: Sequence[BMatch], group_of: Callable = lambda e: e.group
+) -> list:
     """Reordena los visitantes de primera ronda para evitar cruces entre equipos del mismo grupo.
 
     Solo intercambia equipos de partidos de la primera ronda; si no hay forma de evitar
     todos los cruces deja los que no pueda. Los cabezas de serie (locales) no se mueven.
+    ``group_of`` devuelve el grupo de cada lugar (None si todavía no se sabe quién va: no choca).
     """
     teams = list(entrants)
     r1 = [m for m in matches if m.round == 1]
 
     def clash(h: int, a: int) -> bool:
-        return teams[h - 1].group == teams[a - 1].group
+        gh, ga = group_of(teams[h - 1]), group_of(teams[a - 1])
+        return gh is not None and gh == ga
 
     away = [m.away.value for m in r1]
     home = [m.home.value for m in r1]
@@ -128,4 +148,15 @@ def suggest_cup_plans(n_groups: int, group_size: int) -> list[CupPlan]:
             if total - qualified >= 4:  # alcanza para una copa de consolación
                 # recoge a todos los no clasificados: lo que quedó de cada puesto restante
                 plans.append(CupPlan(f"{lab} · con Copa de Plata", (oro, CupSpec("Copa de Plata", rest_pos))))
+    # reclasificatorio: los primeros pasan directo, 2º y 3º se cruzan (ganan -> Oro, pierden -> Plata)
+    if group_size >= 3 and n_groups >= 2 and n_groups & (n_groups - 1) == 0:
+        playoff = "Reclasificación"
+        plans.append(CupPlan(
+            "Primero directo a Oro · 2º vs 3º define Oro y Plata",
+            (
+                CupSpec(playoff, (2, 3), max_rounds=1),
+                CupSpec("Copa de Oro", (1,), from_winners=(playoff,)),
+                CupSpec("Copa de Plata", tuple(range(4, group_size + 1)), from_losers=(playoff,)),
+            ),
+        ))
     return plans

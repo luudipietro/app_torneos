@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from typing import Mapping
 
 from .team import Team
 
@@ -39,27 +40,63 @@ def suggest_layouts(n_teams: int, min_size: int = 3, max_size: int = 8) -> list[
     return out
 
 
-def draw_groups(
-    teams: list[Team], n_groups: int, seed: int | None = None
-) -> list[list[Team]]:
-    """Sorteo con cabezas de serie: los de serie se reparten primero, uno por grupo.
+def draw_steps(
+    teams: list[Team], n_groups: int, seed: int | None = None, fixed: Mapping[int, int] | None = None
+) -> list[tuple[Team, int]]:
+    """Sorteo con cabezas de serie, como lista de pasos (equipo, índice de grupo) en el orden en que salen.
 
-    Los equipos sin serie se mezclan al azar y se completan en serpentina.
+    Los de serie se reparten primero, uno por grupo; los demás se mezclan al azar.
+    ``fixed`` (id de equipo -> grupo) son equipos ya ubicados a mano: no salen en los pasos,
+    pero cuentan para el tamaño de los grupos y para repartir los cabezas de serie.
     Reproducible con ``seed``.
     """
     rng = random.Random(seed)
     layout_for(len(teams), n_groups)  # valida
-    seeded = sorted((t for t in teams if t.seed is not None), key=lambda t: t.seed)
-    rest = [t for t in teams if t.seed is None]
+    fixed = dict(fixed or {})
+    ids = {t.id for t in teams}
+    for tid, g in fixed.items():
+        if tid not in ids:
+            raise ValueError(f"el equipo {tid} no existe")
+        if not 0 <= g < n_groups:
+            raise ValueError(f"grupo inválido para el equipo {tid}")
+    free = [t for t in teams if t.id not in fixed]
+    seeded = sorted((t for t in free if t.seed is not None), key=lambda t: t.seed)
+    rest = [t for t in free if t.seed is None]
     rng.shuffle(rest)
-    groups: list[list[Team]] = [[] for _ in range(n_groups)]
-    # bombos: de a n_groups equipos por vuelta, repartidos en orden aleatorio.
-    # Un bombo incompleto (final) deja grupos con un equipo más: tamaños base o base+1.
     pool = seeded + rest
-    for start in range(0, len(pool), n_groups):
-        pot = pool[start:start + n_groups]
-        order = list(range(n_groups))
-        rng.shuffle(order)
-        for t, gi in zip(pot, order):
-            groups[gi].append(t)
+    steps: list[tuple[Team, int]] = []
+    if not fixed:
+        # bombos: de a n_groups equipos por vuelta, repartidos en orden aleatorio.
+        # Un bombo incompleto (final) deja grupos con un equipo más: tamaños base o base+1.
+        for start in range(0, len(pool), n_groups):
+            order = list(range(n_groups))
+            rng.shuffle(order)
+            steps += zip(pool[start:start + n_groups], order)
+        return steps
+    sizes = [0] * n_groups
+    seeds_in = [0] * n_groups
+    for t in teams:
+        if t.id in fixed:
+            sizes[fixed[t.id]] += 1
+            seeds_in[fixed[t.id]] += t.seed is not None
+    for t in pool:  # cada equipo va a uno de los grupos más vacíos (y con menos cabezas de serie)
+        key = [(seeds_in[g] if t.seed is not None else 0, sizes[g]) for g in range(n_groups)]
+        g = rng.choice([g for g in range(n_groups) if key[g] == min(key)])
+        sizes[g] += 1
+        seeds_in[g] += t.seed is not None
+        steps.append((t, g))
+    return steps
+
+
+def draw_groups(
+    teams: list[Team], n_groups: int, seed: int | None = None, fixed: Mapping[int, int] | None = None
+) -> list[list[Team]]:
+    """Grupos resultantes del sorteo (primero los equipos ubicados a mano, luego los sorteados)."""
+    steps = draw_steps(teams, n_groups, seed, fixed)  # valida ``fixed``
+    by_id = {t.id: t for t in teams}
+    groups: list[list[Team]] = [[] for _ in range(n_groups)]
+    for tid, g in (fixed or {}).items():
+        groups[g].append(by_id[tid])
+    for t, g in steps:
+        groups[g].append(t)
     return groups

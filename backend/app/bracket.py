@@ -57,3 +57,7 @@ def close_match(db: Session, m: models.Match, home_pens: int | None = None, away
         m.home_goals = m.away_goals = 0
     m.status = "finished"
     sync(db, m)
+    if m.group_id is not None:  # el último partido de grupos arma las llaves si hay un formato guardado
+        from .knockout_build import auto_create
+
+        auto_create(db, m)

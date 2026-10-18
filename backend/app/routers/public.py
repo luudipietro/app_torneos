@@ -51,7 +51,9 @@ def public_tournament(token: str, response: Response, db: Session = Depends(get_
             for g in gstage.groups
         ]
     cups = [
-        schemas.PublicCup(name=s.name, rounds=int(s.config.get("rounds", 1)), matches=_matches(db, s.id))
+        schemas.PublicCup(
+            name=s.name, rounds=int(s.config.get("rounds", 1)),
+            total_rounds=int(s.config.get("total_rounds", s.config.get("rounds", 1))), matches=_matches(db, s.id))
         for s in t.stages if s.type == "knockout"
     ]
     return schemas.PublicOut(
