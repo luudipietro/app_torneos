@@ -1,52 +1,10 @@
-export type Tournament = { id: number; name: string; start_date: string | null; rules: Record<string, unknown>; my_role: 'admin' | 'scorer' }
-export type Me = { id: number; email: string; name: string }
-export type Member = { user_id: number; name: string; email: string; role: 'admin' | 'scorer' }
-export type Invitation = { id: number; email: string; role: 'admin' | 'scorer' }
-export type Members = { members: Member[]; invitations: Invitation[] }
-export type Team = { id: number; tournament_id: number; name: string; crest_url: string | null; delegate: string | null; seed: number | null }
-export type Player = { id: number; enabled: boolean; team_id: number; name: string; dni: string; birth_date: string | null; number: number | null; position: string | null }
-export type Layout = { n_groups: number; sizes: number[]; balanced: boolean }
-export type Group = { id: number; name: string; team_ids: number[] }
-export type Stage = { id: number; order: number; type: string; name: string; config: Record<string, unknown>; groups: Group[] }
-export type Match = { id: number; stage_id: number; group_id: number | null; round: number; home_team_id: number | null; away_team_id: number | null; home_goals: number | null; away_goals: number | null; status: string; assignee_ids: number[]; home_pens: number | null; away_pens: number | null; is_knockout: boolean; is_third_place: boolean; scheduled_at: string | null; venue: string | null }
-export type MatchEvent = { id: number; client_id?: string | null; team_id: number; player_id: number; type: string; minute: number | null; pending?: boolean }
-export type Sheet = { id: number; content_type: string; pending?: boolean; localBlob?: Blob }
-export type Comment = { id: number; user_id: number; author: string; text: string; created_at: string; pending?: boolean }
-export type MatchDetail = Match & { events: MatchEvent[]; sheets: Sheet[]; comments: Comment[] }
-export type LineupPlayer = {
-  player_id: number; name: string; dni: string; number: number | null; has_photo: boolean; enabled: boolean
-  present: boolean; verified_by: string | null; verified_at: string | null
-  suspension: { remaining: number; reason: 'yellows' | 'red' } | null; yellows: number
-}
-export type LineupSide = { team_id: number; team_name: string; players: LineupPlayer[]; present_count: number }
-export type Lineup = { match_id: number; status: string; home: LineupSide; away: LineupSide }
-export type TournamentSuspension = { team_id: number; team_name: string; player_id: number; player_name: string; remaining: number; reason: 'yellows' | 'red' }
-export type Cup = { name: string; positions: number[]; extra: { position: number; count: number }[] }
-export type Plan = { label: string; cups: Cup[] }
-export type KnockoutOptions = { cups: Cup[]; third_place: boolean; avoid_same_group: boolean }
-export type Entrant = { seed: number; team_id: number; group_id: number; group_name: string; position: number; points: number; gd: number }
-export type CupPreview = { name: string; size: number; byes: number; rounds: number; entrants: Entrant[] }
-export type KnockoutPreview = { unplayed: number; cups: CupPreview[] }
-export type Bundle = { detail: MatchDetail; lineup: Lineup | null }
-export type ScorerRow = { rank: number; player_id: number; name: string; team_id: number; team_name: string; goals: number; penalties: number }
-export type CardRow = { player_id: number; name: string; team_id: number; team_name: string; yellow: number; red: number }
-export type DefenseRow = { rank: number; team_id: number; team_name: string; played: number; goals_against: number; average: number; clean_sheets: number }
-export type FairPlayRow = { team_id: number; team_name: string; yellow: number; red: number; points: number }
-export type Stats = {
-  matches_played: number; total_goals: number; goals_per_match: number
-  scorers: ScorerRow[]; cards: CardRow[]; defense: DefenseRow[]; fair_play: FairPlayRow[]; suspensions: TournamentSuspension[]
-}
-export type PublicMatch = Pick<Match, 'id' | 'round' | 'group_id' | 'home_team_id' | 'away_team_id' | 'home_goals' | 'away_goals' | 'home_pens' | 'away_pens' | 'status' | 'scheduled_at' | 'venue' | 'is_third_place'>
-export type PublicData = {
-  name: string; start_date: string | null; teams: { id: number; name: string; crest_url: string | null }[]
-  groups_name: string | null; groups: { id: number; name: string; standings: Row[]; matches: PublicMatch[] }[]
-  cups: { name: string; rounds: number; matches: PublicMatch[] }[]
-  stats: Stats; updated_at: string
-}
-export type PublicEvent = { minute: number | null; type: string; player_name: string; team_id: number }
-export type PublicLink = { enabled: boolean; token: string | null }
-export type Row = { team_id: number; played: number; won: number; drawn: number; lost: number; gf: number; ga: number; gd: number; points: number }
-export type GroupStandings = { group_id: number; name: string; rows: Row[] }
+import type {
+  Bundle, Comment, DrawResult, GroupStandings, Invitation, KnockoutConfig, KnockoutOptions, KnockoutPreview, Layout, Lineup, Match,
+  MatchDetail, Me, Members, Plan, Player, PublicData, PublicEvent, PublicLink, PublicMatch, Stage, Stats, Team,
+  Tournament, TournamentSuspension,
+} from './types'
+
+export * from './types'
 
 const KEY = 'token'
 export const getToken = () => localStorage.getItem(KEY)
@@ -97,16 +55,18 @@ export const api = {
   createTournament: (name: string, start_date: string | null) => req<Tournament>('POST', '/tournaments', { name, start_date }),
   teams: (tid: number) => req<Team[]>('GET', `/tournaments/${tid}/teams`),
   createTeam: (tid: number, data: { name: string; delegate?: string | null; seed?: number | null }) => req<Team>('POST', `/tournaments/${tid}/teams`, data),
+  updateTeam: (id: number, data: { seed?: number | null; name?: string }) => req<Team>('PATCH', `/teams/${id}`, data),
   deleteTeam: (id: number) => req<void>('DELETE', `/teams/${id}`),
   players: (teamId: number) => req<Player[]>('GET', `/teams/${teamId}/players`),
   createPlayer: (teamId: number, data: { name: string; dni: string; number?: number | null; position?: string | null }) => req<Player>('POST', `/teams/${teamId}/players`, data),
   deletePlayer: (id: number) => req<void>('DELETE', `/players/${id}`),
   layouts: (tid: number) => req<Layout[]>('GET', `/tournaments/${tid}/layouts`),
   stages: (tid: number) => req<Stage[]>('GET', `/tournaments/${tid}/stages`),
-  createGroups: (tid: number, data: { n_groups: number; double_round: boolean; seed?: number | null }) => req<Stage>('POST', `/tournaments/${tid}/stages/groups`, data),
+  createGroups: (tid: number, data: { n_groups?: number; groups?: number[][]; double_round: boolean; seed?: number | null }) => req<Stage>('POST', `/tournaments/${tid}/stages/groups`, data),
+  drawGroups: (tid: number, data: { n_groups: number; seed?: number | null; fixed?: Record<number, number> }) => req<DrawResult>('POST', `/tournaments/${tid}/stages/groups/draw`, data),
   deleteStage: (id: number) => req<void>('DELETE', `/stages/${id}`),
   matches: (stageId: number) => req<Match[]>('GET', `/stages/${stageId}/matches`),
-  setResult: (matchId: number, home_goals: number, away_goals: number) => req<Match>('PUT', `/matches/${matchId}/result`, { home_goals, away_goals }),
+  setResult: (matchId: number, home_goals: number, away_goals: number, pens?: { home_pens: number; away_pens: number }) => req<Match>('PUT', `/matches/${matchId}/result`, { home_goals, away_goals, ...pens }),
   standings: (stageId: number) => req<GroupStandings[]>('GET', `/stages/${stageId}/standings`),
   match: (id: number) => req<MatchDetail>('GET', `/matches/${id}`),
   addEvent: (id: number, data: { player_id: number; type: string; minute: number | null }) => req<MatchDetail>('POST', `/matches/${id}/events`, data),
@@ -114,6 +74,8 @@ export const api = {
   finishMatch: (id: number, pens?: { home_pens: number; away_pens: number }) => req<Match>('POST', `/matches/${id}/finish`, pens ?? {}),
   knockoutPlans: (tid: number) => req<Plan[]>('GET', `/tournaments/${tid}/knockout/plans`),
   knockoutPreview: (tid: number, o: KnockoutOptions) => req<KnockoutPreview>('POST', `/tournaments/${tid}/knockout/preview`, o),
+  knockoutConfig: (tid: number) => req<KnockoutConfig | null>('GET', `/tournaments/${tid}/knockout/config`),
+  saveKnockoutConfig: (tid: number, c: KnockoutConfig) => req<KnockoutConfig>('PUT', `/tournaments/${tid}/knockout/config`, c),
   createKnockout: (tid: number, o: KnockoutOptions) => req<Stage[]>('POST', `/tournaments/${tid}/stages/knockout`, o),
   reopenMatch: (id: number) => req<Match>('POST', `/matches/${id}/reopen`),
   uploadSheet: (id: number, file: File) => { const f = new FormData(); f.append('file', file); return req<MatchDetail>('POST', `/matches/${id}/sheets`, f) },

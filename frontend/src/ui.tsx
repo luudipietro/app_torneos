@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /** Carga datos async y expone recarga + error. */
 export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
@@ -25,4 +25,24 @@ export function useAction() {
     try { await fn(); return true } catch (e) { setError((e as Error).message); return false } finally { setBusy(false) }
   }
   return { error, busy, run }
+}
+
+/** Como useState pero guarda en localStorage (por ``key``), para no perder borradores al cambiar de pestaña. */
+export function usePersistentState<T>(key: string, init: T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const s = localStorage.getItem(key)
+      return s ? (JSON.parse(s) as T) : init
+    } catch { return init }
+  })
+  const cleared = useRef(false)
+  useEffect(() => {
+    if (cleared.current) return
+    try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* sin almacenamiento */ }
+  }, [key, value])
+  const clear = useCallback(() => {
+    cleared.current = true
+    try { localStorage.removeItem(key) } catch { /* sin almacenamiento */ }
+  }, [key])
+  return [value, setValue, clear] as const
 }

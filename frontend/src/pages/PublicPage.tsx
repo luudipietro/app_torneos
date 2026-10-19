@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { publicApi, PublicData, PublicEvent, PublicMatch } from '../api'
 import StatsView from '../components/StatsView'
-import { CupBracket } from './Bracket'
+import { CupBracket } from './bracket/CupBracket'
 
 type Tab = 'tabla' | 'partidos' | 'llaves' | 'stats'
 
@@ -63,7 +63,7 @@ export default function PublicPage() {
       {tab === 'partidos' && <Fixture data={data} names={names} token={token} />}
       {tab === 'llaves' && (
         <div className="flex flex-col gap-8">
-          {data.cups.map((c) => <CupBracket key={c.name} name={c.name} rounds={c.rounds} matches={c.matches} names={names} hrefFor={() => null} />)}
+          {data.cups.map((c) => <CupBracket key={c.name} name={c.name} rounds={c.rounds} totalRounds={c.total_rounds ?? c.rounds} matches={c.matches} names={names} hrefFor={() => null} />)}
         </div>
       )}
       {tab === 'stats' && <StatsView stats={data.stats} />}

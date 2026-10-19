@@ -24,6 +24,10 @@ export default function Teams({ tid }: { tid: number }) {
         <h2 className="font-semibold">Agregar equipo ({teams?.length ?? 0}/64)</h2>
         <input className="input" placeholder="Nombre del equipo" value={name} onChange={(e) => setName(e.target.value)} required />
         <input className="input" type="number" min={1} placeholder="Cabeza de serie (opcional)" value={seed} onChange={(e) => setSeed(e.target.value)} />
+        <p className="text-xs text-slate-500">
+          Cabeza de serie: el número es la prioridad (1 = el mejor). En el sorteo los cabezas de serie salen primero y se reparten
+          uno por grupo, así no se cruzan entre sí. También podés marcarlos o sacarles la marca después, en la lista.
+        </p>
         <ErrorMsg msg={act.error} />
         <button className="btn" disabled={act.busy}>Agregar</button>
       </form>
@@ -33,9 +37,9 @@ export default function Teams({ tid }: { tid: number }) {
           <li key={t.id} className="card">
             <div className="flex items-center justify-between gap-2">
               <button className="flex-1 text-left font-medium" onClick={() => setOpen(open === t.id ? null : t.id)}>
-                {t.name}{' '}
-                {t.seed && <span className="ml-1 rounded bg-amber-100 px-1.5 text-xs text-amber-800">serie {t.seed}</span>}
+                {t.name}
               </button>
+              <SeedControl team={t} onSaved={reload} />
               <button
                 className="text-sm text-red-600"
                 onClick={async () => {
@@ -50,6 +54,26 @@ export default function Teams({ tid }: { tid: number }) {
         ))}
       </ul>
     </div>
+  )
+}
+
+/** Marca o quita la cabeza de serie de un equipo ya cargado (vacío = sin serie). */
+function SeedControl({ team, onSaved }: { team: Team; onSaved: () => void }) {
+  const [v, setV] = useState(team.seed?.toString() ?? '')
+  const act = useAction()
+  const save = async () => {
+    const seed = v === '' ? null : Number(v)
+    if (seed === team.seed) return
+    if (await act.run(() => api.updateTeam(team.id, { seed }))) onSaved()
+    else setV(team.seed?.toString() ?? '')
+  }
+  return (
+    <label className="flex items-center gap-1 text-xs text-slate-500" title="Cabeza de serie: 1 = el mejor. Vacío = sin serie.">
+      Serie
+      <input className="w-14 rounded-lg border border-slate-300 py-1.5 text-center text-sm" inputMode="numeric" placeholder="–" value={v}
+        onChange={(e) => setV(e.target.value.replace(/\D/g, ''))} onBlur={save} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+      {team.seed != null && <button type="button" className="text-red-600" aria-label="Quitar cabeza de serie" onClick={() => { setV(''); act.run(() => api.updateTeam(team.id, { seed: null })).then(onSaved) }}>✕</button>}
+    </label>
   )
 }
 

@@ -1,5 +1,6 @@
 import { Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
+import ErrorBoundary from './components/ErrorBoundary'
 import { api, getToken, setToken } from './api'
 import SyncBanner from './offline/SyncBanner'
 import { clearPrivateData } from './offline/cache'
@@ -35,7 +36,7 @@ function Protected({ children }: { children: React.ReactNode }) {
           <Link to="/" className="text-lg font-bold text-green-700">⚽ Torneos</Link>
           <button className="text-sm text-slate-500" onClick={() => void logout(nav)}>Salir</button>
         </header>
-        {children}
+        <ErrorBoundary resetKey={location.pathname}>{children}</ErrorBoundary>
       </div>
     </>
   )

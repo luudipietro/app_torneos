@@ -16,20 +16,21 @@ App para organizar torneos de fútbol (hasta 64 equipos): grupos y fixture autom
 ```
 backend/
   domain/      motor puro sin DB: fixture.py (round-robin), standings.py (tabla y desempates),
-               groups.py (layouts y sorteo), discipline.py (suspensiones), knockout.py (llaves y byes),
+               groups.py (layouts y sorteo con equipos fijos y pasos), phases.py (fases/copas encadenadas), discipline.py (suspensiones), knockout.py (llaves y byes),
                qualification.py (clasificación a copas, mejores N, evitar mismo grupo)
-  app/         models.py, schemas.py, security.py (JWT+argon2), deps.py, config.py, db.py,
+  app/         models.py, schemas/ (paquete, un módulo por tema), security.py (JWT+argon2), deps.py, config.py, db.py,
                bracket.py (avance de ganadores), discipline.py, stats.py, media.py (imágenes)
-    routers/   auth, tournaments (+equipos/jugadores/fotos/stats), stages, knockout, matches,
+    routers/   auth, draw (sorteo manual/automático), tournaments (+equipos/jugadores/fotos/stats), stages, knockout, matches,
                lineup (buena fe), members (invitaciones/asignaciones/fecha-cancha), sync, public
   alembic/     migraciones (SQLite: usar índices únicos, no ALTER de constraints)
-  tests/       pytest (302 tests)
+  tests/       pytest (322 tests)
 frontend/src/
-  api.ts       cliente tipado (+ publicApi sin auth)
+  api/         types.ts + index.ts: cliente tipado (+ publicApi sin auth)
   offline/     idb.ts, queue.ts (cola/flush), apply.ts (aplica pendientes sobre la copia), hooks.ts,
                SyncBanner.tsx, image.ts, cache.ts, offline.test.ts (vitest)
-  pages/       Login, Tournaments, TournamentPage (tabs), Teams, Groups, Bracket, MatchPage,
-               LineupPage, Sanctions, Stats, Staff, MyMatches, PublicPage
+  pages/       Login, Tournaments, TournamentPage (tabs), Teams, LineupPage, Sanctions, Stats, Staff,
+               MyMatches, PublicPage; carpetas con sus componentes: groups/ (DrawBoard con sorteo
+               manual/animado, StageView), bracket/ (Setup + PhaseEditor, CupBracket), match/
   components/  StatsView.tsx
 deploy/        vacío (pendiente)
 .claude/launch.json   servidores de dev: api (:8000), web (:5173), web-preview (:4173, build PWA)
@@ -41,6 +42,10 @@ deploy/        vacío (pendiente)
 3. Partido: goles/penales/en contra, amarillas/rojas/doble amarilla (el marcador se calcula de los goles), foto de planilla, comentarios, cierre/reapertura (solo admin edita partido cerrado), fecha y cancha.
 4. Buena fe + suspensiones automáticas (reglas en `tournament.rules`: `yellows_for_suspension`=3, `yellow_suspension_matches`, `red_suspension_matches`, `require_lineup`, `allow_onsite_players`, `win/draw/loss`, `tiebreakers`).
 5. Equipo de trabajo: invitar por email (si no tiene cuenta queda pendiente y entra al registrarse), asignar partidos uno a uno o en bloque, «Mis partidos» para el planillero. **La app no envía mails.**
+6. Sorteo de grupos manual, automático (animado, uno a uno) o mixto: `POST .../stages/groups/draw` devuelve el orden de salida sin guardar y `POST .../stages/groups` con `groups` confirma.
+6a. Borradores del sorteo y de la config de llaves: se guardan en localStorage (`draft:groups:<tid>`, `draft:knockout:<tid>`, hook `usePersistentState`) hasta confirmar. Cruces de llave: `pairing` por copa = seeded (mejor vs peor) | cross (estilo mundial 1ºA-2ºB) | random (`pairing_seed`) | manual (`manual_pairs` con códigos "1A", "G1:Fase"). Las copas se pueden listar en cualquier orden (se resuelven por dependencias). La vista previa devuelve `pairs` provisorios. `cross` sirve para cualquier par de puestos (1º/2º, 2º/3º…). El formato se guarda en el torneo (`rules.knockout_plan`, `GET/PUT /knockout/config`, módulo `app/knockout_build.py`) y con `auto_create` las llaves se arman solas al cerrar el último partido de grupos (hook en `bracket.close_match`). Modo prueba: checkbox en la lista de grupos para cargar resultados inline (con confirmación).
+6a2. Resultados: la lista de grupos es solo lectura (botón grande Abrir/Ver); en el partido se cierra con confirmación («no se podrá cambiar») y las llaves empatadas (también 0-0) piden penales. BulkAssign (`components/`) asigna en bloque por etapa/copa, ronda, grupo y cancha, y puede poner la cancha en bloque.
+6b. Fases encadenadas (`CupSpec.from_winners/from_losers/max_rounds`): p. ej. 1º directo a Oro, 2º vs 3º en una ronda (ganan→Oro, pierden→Plata, con los 4º). Los lugares pendientes se completan con `next`/`loser_next` entre etapas.
 6. Llaves: byes, 3er puesto, penales, clasificación desde grupos (top N + mejores N), Copa de Oro/Plata, evitar cruces del mismo grupo, avance automático de ganadores.
 7. Offline completo para el planillero (buena fe, eventos, comentarios, foto, cierre). Alta de jugador en cancha y borrar fotos/comentarios ya enviados requieren conexión.
 8. Estadísticas (goleadores, valla menos vencida, tarjetas, fair play 1/3 pts, suspendidos) y **vista pública** `/p/<token>` con QR (no expone DNI, fotos, comentarios ni emails).
@@ -51,7 +56,7 @@ Requisitos: Python 3.12+ y Node 20+ (se usó Python 3.14, Node 24).
 cd backend
 pip install -r requirements.txt -r requirements-dev.txt
 python -m alembic upgrade head        # crea backend/torneos.db (SQLite)
-python -m pytest -q                   # 302 tests
+python -m pytest -q                   # 322 tests
 python -m uvicorn app.main:app --reload   # docs en :8000/docs
 cd ../frontend
 npm install

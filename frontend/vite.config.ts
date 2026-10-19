@@ -38,6 +38,6 @@ export default defineConfig({
     }),
   ],
   test: { environment: 'node', setupFiles: ['./src/test-setup.ts'] },
-  server: { proxy: { '/api': 'http://localhost:8000' } },
-  preview: { proxy: { '/api': 'http://localhost:8000' } },
+  server: { proxy: { '/api': 'http://localhost:8001' } },
+  preview: { proxy: { '/api': 'http://localhost:8001' } },
 })

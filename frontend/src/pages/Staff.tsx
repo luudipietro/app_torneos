@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api'
+import BulkAssign from '../components/BulkAssign'
 import { ErrorMsg, useAction, useLoad } from '../ui'
 
 const ROLE = { admin: 'Organizador', scorer: 'Planillero / veedor' } as const
@@ -62,52 +63,5 @@ export default function Staff({ tid }: { tid: number }) {
 
       {data && <BulkAssign tid={tid} people={data.members} />}
     </div>
-  )
-}
-
-function BulkAssign({ tid, people }: { tid: number; people: { user_id: number; name: string }[] }) {
-  const stage = useLoad(() => api.stages(tid).then((s) => s[0] ?? null), [tid])
-  const matches = useLoad(() => (stage.data ? api.matches(stage.data.id) : Promise.resolve([])), [stage.data?.id])
-  const [person, setPerson] = useState('')
-  const [round, setRound] = useState('')
-  const [group, setGroup] = useState('')
-  const [done, setDone] = useState('')
-  const act = useAction()
-  if (!stage.data) return null
-  const rounds = [...new Set((matches.data ?? []).map((m) => m.round))].sort((a, b) => a - b)
-
-  const assign = async () => {
-    const ids = (matches.data ?? [])
-      .filter((m) => (!round || m.round === Number(round)) && (!group || m.group_id === Number(group)))
-      .map((m) => m.id)
-    setDone('')
-    if (ids.length && (await act.run(() => api.bulkAssign(tid, Number(person), ids)))) {
-      setDone(`Asignado a ${ids.length} partido${ids.length > 1 ? 's' : ''}.`)
-      matches.reload()
-    }
-  }
-
-  return (
-    <section className="card flex flex-col gap-3">
-      <h2 className="font-semibold">Asignar partidos en bloque</h2>
-      <p className="text-sm text-slate-500">También podés asignar uno por uno desde la pantalla de cada partido.</p>
-      <select className="input" value={person} onChange={(e) => setPerson(e.target.value)}>
-        <option value="">Persona…</option>
-        {people.map((p) => <option key={p.user_id} value={p.user_id}>{p.name}</option>)}
-      </select>
-      <div className="grid grid-cols-2 gap-2">
-        <select className="input" value={round} onChange={(e) => setRound(e.target.value)}>
-          <option value="">Todas las fechas</option>
-          {rounds.map((r) => <option key={r} value={r}>Fecha {r}</option>)}
-        </select>
-        <select className="input" value={group} onChange={(e) => setGroup(e.target.value)}>
-          <option value="">Todos los grupos</option>
-          {stage.data.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
-      </div>
-      <ErrorMsg msg={act.error} />
-      {done && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">{done}</p>}
-      <button className="btn" disabled={!person || act.busy} onClick={assign}>Asignar</button>
-    </section>
   )
 }
